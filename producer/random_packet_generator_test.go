@@ -21,3 +21,15 @@ func TestRandPktGenerator_Run(t *testing.T) {
 	gen.Init(config)
 	gen.Run()
 }
+
+func BenchmarkRandPktConfig(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		randPktConfig()
+	}
+}
+func BenchmarkRandomChangePacket(b *testing.B) {
+	lyrs := randPktConfig()
+	for i := 0; i < b.N; i++ {
+		randomChangePacket(lyrs)
+	}
+}
