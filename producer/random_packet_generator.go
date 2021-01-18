@@ -22,7 +22,8 @@ const (
 )
 
 var (
-	wg sync.WaitGroup
+	wg   sync.WaitGroup
+	lock sync.Mutex
 )
 
 type RandPktGenerator struct {
@@ -105,13 +106,27 @@ func (r *RandPktGenerator) init() {
 	//init sender
 	r.sender = new(sender)
 	r.sender.Init(r.config)
+	r.sender.father = r //set father
 	//init workers
 	r.workers = nil
 	for i := 0; i < workerCount; i++ {
-		w := new(worker)
-		w.Init(r.sender.dsChan)
-		r.workers = append(r.workers, w)
+		r.addWorker()
 	}
+}
+
+func (r *RandPktGenerator) addWorker() {
+	lock.Lock()
+	defer lock.Unlock()
+	w := new(worker)
+	w.Init(r.sender.dsChan)
+	r.workers = append(r.workers, w)
+}
+
+func (r *RandPktGenerator) removeWorker() {
+	lock.Lock()
+	defer lock.Unlock()
+	r.workers[len(r.workers)-1].Stop()
+	r.workers = r.workers[:len(r.workers)]
 }
 
 //
@@ -182,17 +197,23 @@ func (w *worker) Run() {
 				w.exportChan <- buffer.Bytes()
 			}
 		}
+		w.Clear()
 	}()
 }
 func (w *worker) Stop() {
 	w.runningStatus = WorkStatusStop
 }
 
+func (w *worker) Clear() {
+}
+
 type sender struct {
-	dsChan  chan []byte
-	running WorkStatus
-	handler *pcap.Handle
-	sts     statics
+	dsChan       chan []byte
+	running      WorkStatus
+	handler      *pcap.Handle
+	sts          statics
+	father       *RandPktGenerator
+	reachTopTime time.Time
 }
 
 func (s *sender) Init(config map[string]string) {
@@ -240,6 +261,7 @@ func (s *sender) Run() {
 
 		stopTicker := time.NewTicker(time.Second * 5)
 		logTicker := time.NewTicker(time.Second * 1)
+		upperTicker := time.NewTicker(time.Second * 5)
 		defer stopTicker.Stop()
 		for s.running == WorkStatusRunning {
 			select {
@@ -247,6 +269,17 @@ func (s *sender) Run() {
 			case <-logTicker.C:
 				log.Printf("[sender]chan.len()=%d,pps=%d", len(s.dsChan), s.sts.CountLoad())
 				s.sts.CountClear()
+			case <-upperTicker.C:
+				now := time.Now()
+				if now.Sub(s.reachTopTime) > time.Second*60 {
+					continue
+				}
+				if cap(s.dsChan) > 3*len(s.dsChan) {
+					s.father.addWorker()
+				} else {
+					s.father.removeWorker()
+					s.reachTopTime = now
+				}
 			case v, ok := <-s.dsChan:
 				if !ok {
 					continue
