@@ -199,7 +199,7 @@ func (w *worker) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		stopTicker := time.NewTicker(time.Second * 5)
+		stopTicker := time.NewTicker(time.Second * 10)
 		logTicker := time.NewTicker(time.Second * 1)
 		defer stopTicker.Stop()
 		defer logTicker.Stop()
@@ -296,7 +296,7 @@ func (s *sender) Run() {
 				s.sts.CountClear()
 			case <-upperTicker.C:
 				now := time.Now()
-				if now.Sub(s.reachTopTime) < time.Second*60 {
+				if now.Sub(s.reachTopTime) < time.Second*30 {
 					continue
 				}
 				if cap(s.dsChan) > 3*len(s.dsChan) {
@@ -304,10 +304,9 @@ func (s *sender) Run() {
 					log.Println("[sender]chan is not full,call father adding a worker")
 				} else {
 					s.father.removeWorker()
-					s.reachTopTime = now
 					log.Println("[sender]chan is full,call father removing a worker")
 				}
-
+				s.reachTopTime = now
 			case v, ok := <-s.dsChan:
 				if !ok {
 					continue
