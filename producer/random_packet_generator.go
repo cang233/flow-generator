@@ -110,7 +110,9 @@ func (r *RandPktGenerator) init() {
 	//init workers
 	r.workers = nil
 	for i := 0; i < workerCount; i++ {
-		r.addWorker()
+		w := new(worker)
+		w.Init(r.sender.dsChan, len(r.workers))
+		r.workers = append(r.workers, w)
 	}
 }
 
@@ -118,8 +120,9 @@ func (r *RandPktGenerator) addWorker() {
 	lock.Lock()
 	defer lock.Unlock()
 	w := new(worker)
-	w.Init(r.sender.dsChan)
+	w.Init(r.sender.dsChan, len(r.workers))
 	r.workers = append(r.workers, w)
+	w.Run() //run immediately
 }
 
 func (r *RandPktGenerator) removeWorker() {
@@ -137,8 +140,8 @@ func (r *RandPktGenerator) Stop() {
 	r.sender.Stop()
 }
 
-func randPktConfig() randomPacketLayer {
-	return randomPacketLayer{
+func randPktConfig() *randomPacketLayer {
+	return &randomPacketLayer{
 		ether: &layers.Ethernet{
 			EthernetType: layers.EthernetTypeIPv4,
 			SrcMAC:       util.RandomMac(),
@@ -166,13 +169,29 @@ func randPktConfig() randomPacketLayer {
 }
 
 type worker struct {
+	id            int
 	runningStatus WorkStatus
 	exportChan    chan []byte
+	sts           statics
+	tmplate       *randomPacketLayer
 }
 
-func (w *worker) Init(exportChan chan []byte) {
+func (w *worker) Init(exportChan chan []byte, id int) {
 	w.runningStatus = WorkStatusStop
 	w.exportChan = exportChan
+	w.id = id
+	w.tmplate = randPktConfig()
+}
+
+func randomChangePacket(lys *randomPacketLayer) {
+	lys.ether.SrcMAC = util.RandomMac()
+	lys.ether.DstMAC = util.RandomMac()
+	lys.ipv4.SrcIP = util.RandomIPv4()
+	lys.ipv4.DstIP = util.RandomIPv4()
+	lys.tcp.Seq = util.RandomSequence()
+	lys.tcp.Ack = util.RandomSequence()
+	lys.tcp.SrcPort = layers.TCPPort(util.RandomPort())
+	lys.tcp.DstPort = layers.TCPPort(util.RandomPort())
 }
 
 func (w *worker) Run() {
@@ -181,20 +200,26 @@ func (w *worker) Run() {
 	go func() {
 		defer wg.Done()
 		stopTicker := time.NewTicker(time.Second * 5)
+		logTicker := time.NewTicker(time.Second * 1)
 		defer stopTicker.Stop()
+		defer logTicker.Stop()
 		for w.runningStatus == WorkStatusRunning {
 			select {
 			case <-stopTicker.C:
+			case <-logTicker.C:
+				log.Printf("[worker-%d]pps=%d", w.id, w.sts.CountLoad())
+				w.sts.CountClear()
 			default: //do rand update
-				lyrs := randPktConfig()
+				randomChangePacket(w.tmplate)
 				buffer := gopacket.NewSerializeBuffer()
 				gopacket.SerializeLayers(buffer, gopacket.SerializeOptions{},
-					lyrs.ether,
-					lyrs.ipv4,
-					lyrs.tcp,
+					w.tmplate.ether,
+					w.tmplate.ipv4,
+					w.tmplate.tcp,
 					gopacket.Payload(util.RandomBytes(util.RandomInt(0, 1000))),
 				)
 				w.exportChan <- buffer.Bytes()
+				w.sts.CountAdd()
 			}
 		}
 		w.Clear()
@@ -267,19 +292,22 @@ func (s *sender) Run() {
 			select {
 			case <-stopTicker.C: //do nothing
 			case <-logTicker.C:
-				log.Printf("[sender]chan.len()=%d,pps=%d", len(s.dsChan), s.sts.CountLoad())
+				log.Printf("[sender]chan.cap()=%d,chan.len()=%d,pps=%d", cap(s.dsChan), len(s.dsChan), s.sts.CountLoad())
 				s.sts.CountClear()
 			case <-upperTicker.C:
 				now := time.Now()
-				if now.Sub(s.reachTopTime) > time.Second*60 {
+				if now.Sub(s.reachTopTime) < time.Second*60 {
 					continue
 				}
 				if cap(s.dsChan) > 3*len(s.dsChan) {
 					s.father.addWorker()
+					log.Println("[sender]chan is not full,call father adding a worker")
 				} else {
 					s.father.removeWorker()
 					s.reachTopTime = now
+					log.Println("[sender]chan is full,call father removing a worker")
 				}
+
 			case v, ok := <-s.dsChan:
 				if !ok {
 					continue
