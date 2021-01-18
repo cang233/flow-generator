@@ -103,7 +103,7 @@ func (r *RandPktGenerator) init() {
 	r.defaultPacket = defaultPacketConfig()
 	//init sender
 	r.sender = new(sender)
-	r.sender.Init(config)
+	r.sender.Init(r.config)
 	//init workers
 	r.workers = nil
 	for i := 0; i < workerCount; i++ {
