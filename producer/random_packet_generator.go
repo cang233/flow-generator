@@ -30,6 +30,7 @@ type RandPktGenerator struct {
 	runningStatus WorkStatus
 	defaultPacket *randomPacketLayer
 	speed         uint64
+	config        map[string]string
 }
 
 type randomPacketLayer struct {
@@ -38,8 +39,12 @@ type randomPacketLayer struct {
 	tcp   *layers.TCP
 }
 
-func (r *RandPktGenerator) Run() {
+func (r *RandPktGenerator) Init(config map[string]string) {
+	r.config = config
 	r.init()
+}
+
+func (r *RandPktGenerator) Run() {
 	r.sender.Run()
 	for i := range r.workers {
 		r.workers[i].Run()
@@ -98,7 +103,7 @@ func (r *RandPktGenerator) init() {
 	r.defaultPacket = defaultPacketConfig()
 	//init sender
 	r.sender = new(sender)
-	r.sender.Init()
+	r.sender.Init(config)
 	//init workers
 	r.workers = nil
 	for i := 0; i < workerCount; i++ {
@@ -189,7 +194,7 @@ type sender struct {
 	sts     statics
 }
 
-func (s *sender) Init() {
+func (s *sender) Init(config map[string]string) {
 	s.dsChan = make(chan []byte, 100*1000)
 	s.running = WorkStatusStop
 	//get handler
@@ -198,7 +203,12 @@ func (s *sender) Init() {
 		promiscuous  bool  = false
 		err          error
 		timeout      time.Duration = 30 * time.Second
+		nicName      string        = "Realtek Gaming GbE Family Controller"
 	)
+	//init config
+	if v, ok := config["i"]; ok {
+		nicName = v
+	}
 
 	devices, err := pcap.FindAllDevs()
 	if err != nil {
@@ -206,14 +216,14 @@ func (s *sender) Init() {
 	}
 
 	for _, value := range devices {
-		if value.Description == "Realtek Gaming GbE Family Controller" {
+		if value.Description == nicName {
 			//Open device
 			s.handler, err = pcap.OpenLive(value.Name, snapshot_len, promiscuous, timeout)
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
-		fmt.Println(value.Description, value.Name)
+		fmt.Println(value.Name, ":", value.Description)
 	}
 	if s.handler == nil {
 		log.Panic("Init handle in sender is nil")
