@@ -1,16 +1,16 @@
 package producer
 
 import (
-	"flag"
 	"flow-generator/log"
 	"testing"
 )
 
 func TestRandPktGenerator_Run(t *testing.T) {
-	var nic string
-	flag.StringVar(&nic, "i", "", "nic which sending packets")
+	// var nic string
+	// flag.StringVar(&nic, "i", "", "nic which sending packets")
 
-	flag.Parse()
+	nic := "enp10s0"
+	// flag.Parse()
 	if len(nic) == 0 {
 		log.Panic("Var port name([-i]) is empty.")
 	}

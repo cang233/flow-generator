@@ -3,14 +3,15 @@ package producer
 import (
 	"flow-generator/util"
 	"fmt"
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
 	"log"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
 )
 
 type WorkStatus int
@@ -216,7 +217,7 @@ func (s *sender) Init(config map[string]string) {
 	}
 
 	for _, value := range devices {
-		if value.Description == nicName {
+		if value.Name == nicName || value.Description == nicName { //为了兼容windows和linux
 			//Open device
 			s.handler, err = pcap.OpenLive(value.Name, snapshot_len, promiscuous, timeout)
 			if err != nil {
@@ -226,7 +227,7 @@ func (s *sender) Init(config map[string]string) {
 		fmt.Println(value.Name, ":", value.Description)
 	}
 	if s.handler == nil {
-		log.Panic("Init handle in sender is nil")
+		log.Panic("Init handle in sender is nil,can not find the nic named " + nicName)
 	}
 }
 
