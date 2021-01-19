@@ -13,21 +13,26 @@ import (
 )
 
 type SimpleFlowGenerator struct {
-	config  map[string]string
+	config  *simpleConfig
 	handler *pcap.Handle
 }
 
+type simpleConfig struct {
+	nicName       string
+	flowPktMax    int
+	pktPayloadMax int
+}
+
 func (s *SimpleFlowGenerator) getOptions() {
-	var nicName string
-	flag.StringVar(&nicName, "i", "enp10s0", "the nic name used for sending packets.")
+	s.config = &simpleConfig{}
+	flag.StringVar(&s.config.nicName, "i", "enp10s0", "the nic name used for sending packets.")
+	flag.IntVar(&s.config.flowPktMax, "pmn", 32, "max number of a flow's packet,not less than 6")
+	flag.IntVar(&s.config.pktPayloadMax, "ps", 10, "max packet payload size")
 
 	flag.Parse()
-	s.config["i"] = nicName
 }
 
 func (s *SimpleFlowGenerator) Init() {
-	//init struct
-	s.config = make(map[string]string, 0)
 	//get options
 	s.getOptions()
 
@@ -41,13 +46,7 @@ func (s *SimpleFlowGenerator) initHandler() {
 		promiscuous bool  = false
 		err         error
 		timeout     time.Duration = 30 * time.Second
-		nicName     string
 	)
-	if v, ok := s.config["i"]; ok {
-		nicName = v
-	} else {
-		log.Panic("nic name needed!")
-	}
 
 	devices, err := pcap.FindAllDevs()
 	if err != nil {
@@ -56,7 +55,7 @@ func (s *SimpleFlowGenerator) initHandler() {
 
 	for _, value := range devices {
 		//这里为了兼容win与linux，同时检查2个
-		if value.Description == nicName || value.Name == nicName {
+		if value.Description == s.config.nicName || value.Name == s.config.nicName {
 			//Open device
 			s.handler, err = pcap.OpenLive(value.Name, snapshotLen, promiscuous, timeout)
 			if err != nil {
@@ -67,7 +66,7 @@ func (s *SimpleFlowGenerator) initHandler() {
 	}
 
 	if s.handler == nil {
-		log.Panicln("can not find nic:", nicName)
+		log.Panicln("can not find nic:", s.config.nicName)
 	}
 }
 
@@ -89,7 +88,7 @@ func (s *SimpleFlowGenerator) Run() {
 	lastTime := time.Now()
 	//loop
 	for {
-		flowPackets = util.RandomInt(6, 32)
+		flowPackets = util.RandomInt(6, s.config.flowPktMax)
 		lys = randPktConfig()
 		//gen a flow
 		for flowPackets > 0 {
@@ -98,7 +97,7 @@ func (s *SimpleFlowGenerator) Run() {
 				lys.ether,
 				lys.ipv4,
 				lys.tcp,
-				gopacket.Payload(util.RandomBytes(20)),
+				gopacket.Payload(util.RandomBytes(s.config.pktPayloadMax)),
 			)
 			err = s.handler.WritePacketData(buffer.Bytes())
 			if err != nil {
