@@ -3,14 +3,15 @@ package test
 import (
 	"bytes"
 	"fmt"
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
 	"log"
 	"math/rand"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
 )
 
 func TestUseGopacket(t *testing.T) {
@@ -30,7 +31,7 @@ func TestUseGopacket(t *testing.T) {
 	}
 
 	for _, value := range devices {
-		if value.Description == "Realtek Gaming GbE Family Controller" {
+		if value.Description == "Realtek Gaming GbE Family Controller" || value.Name == "enp10s0" {
 			//Open device
 			handle, err = pcap.OpenLive(value.Name, snapshot_len, promiscuous, timeout)
 			if err != nil {
@@ -39,6 +40,7 @@ func TestUseGopacket(t *testing.T) {
 		}
 		fmt.Println(value.Description, value.Name)
 	}
+	defer handle.Close()
 	// Send raw bytes over wire
 	data := "this is raw data in packets"
 	data = ""
@@ -77,24 +79,31 @@ func TestUseGopacket(t *testing.T) {
 	}
 	// And create the packet with the layers
 	buffer = gopacket.NewSerializeBuffer()
-	gopacket.SerializeLayers(buffer, options,
-		ethernetLayer,
-		ipLayer,
-		tcpLayer,
-		gopacket.Payload(rawBytes),
-	)
-	outgoingPacket := buffer.Bytes()
+
+	count := 0
+	lastTime := time.Now()
 	for {
-		time.Sleep(time.Second * 3)
-		fmt.Println(handle)
-		fmt.Println(len(outgoingPacket))
+		gopacket.SerializeLayers(buffer, options,
+			ethernetLayer,
+			ipLayer,
+			tcpLayer,
+			gopacket.Payload(rawBytes),
+		)
+		outgoingPacket := buffer.Bytes()
+
 		err = handle.WritePacketData(outgoingPacket)
 		if err != nil {
 			log.Fatal(err)
 		}
+		count++
+		now := time.Now()
+		if now.Sub(lastTime) > time.Second*1 {
+			fmt.Println("pps:", count)
+			lastTime = now
+			count = 0
+		}
 	}
 
-	handle.Close()
 }
 
 func TestCountOx(t *testing.T) {

@@ -31,7 +31,7 @@ func RandomSequence() uint32 {
 
 func RandomBoolean() bool {
 	const N = 1 << 10
-	return rand.Intn(N)-N/2 >= 0
+	return rand.Intn(N) >= N/2
 }
 
 func RandomString(n int) string {

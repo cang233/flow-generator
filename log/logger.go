@@ -10,24 +10,24 @@ func init() {
 }
 
 func Print(v ...interface{}) {
-	logger.Print(v)
+	logger.Print(v...)
 }
 func Println(v ...interface{}) {
-	logger.Println(v)
+	logger.Println(v...)
 }
 
 func Panicf(formatString string, v ...interface{}) {
-	logger.Panicf(formatString, v)
+	logger.Panicf(formatString, v...)
 }
 
 func Panic(v ...interface{}) {
-	logger.Panic(v)
+	logger.Panic(v...)
 }
 
 func Fatal(v ...interface{}) {
-	logger.Fatal(v)
+	logger.Fatal(v...)
 }
 
 func Fatalf(formatString string, v ...interface{}) {
-	logger.Fatalf(formatString, v)
+	logger.Fatalf(formatString, v...)
 }

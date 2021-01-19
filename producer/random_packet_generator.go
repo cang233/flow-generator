@@ -55,9 +55,10 @@ func (r *RandPktGenerator) Run() {
 	wg.Wait()
 }
 
+//TODO 增加worker的数量>=2的时候，吞吐量反而下降巨多，说明gopacket生成包对并发操作支持不好。
 func defaultConfig() map[string]int {
 	return map[string]int{
-		"default_worker_count": 10,
+		"default_worker_count": 1,
 	}
 }
 
@@ -203,6 +204,8 @@ func (w *worker) Run() {
 		logTicker := time.NewTicker(time.Second * 1)
 		defer stopTicker.Stop()
 		defer logTicker.Stop()
+
+		buffer := gopacket.NewSerializeBuffer()
 		for w.runningStatus == WorkStatusRunning {
 			select {
 			case <-stopTicker.C:
@@ -211,12 +214,11 @@ func (w *worker) Run() {
 				w.sts.CountClear()
 			default: //do rand update
 				randomChangePacket(w.tmplate)
-				buffer := gopacket.NewSerializeBuffer()
 				gopacket.SerializeLayers(buffer, gopacket.SerializeOptions{},
 					w.tmplate.ether,
 					w.tmplate.ipv4,
 					w.tmplate.tcp,
-					gopacket.Payload(util.RandomBytes(util.RandomInt(0, 1000))),
+					gopacket.Payload(util.RandomBytes(util.RandomInt(0, 10))),
 				)
 				w.exportChan <- buffer.Bytes()
 				w.sts.CountAdd()
@@ -303,6 +305,10 @@ func (s *sender) Run() {
 					s.father.addWorker()
 					log.Println("[sender]chan is not full,call father adding a worker")
 				} else {
+					//若只有一个worker，则不删除
+					if len(s.father.workers) <= 1 {
+						continue
+					}
 					s.father.removeWorker()
 					log.Println("[sender]chan is full,call father removing a worker")
 				}
