@@ -101,7 +101,18 @@ func (s *SimpleFlowGenerator) Run() {
 			)
 			err = s.handler.WritePacketData(buffer.Bytes())
 			if err != nil {
-				log.Fatal(err)
+				for i := 0; i < 10; i++ {
+					err = s.handler.WritePacketData(buffer.Bytes())
+					if err != nil {
+						log.Panicln(err)
+					}else{
+						break
+					}
+					time.Sleep(time.Millisecond * 10)
+				}
+				if err != nil {
+					log.Fatal(err)
+				}
 			}
 			//change flag
 			if flowPackets == 1 {
